@@ -1,0 +1,51 @@
+### Sample requests (IntelliJ HTTP client / VS Code REST Client). Run the app with the default `local` profile.
+
+### 1) Create a checkout  -> 201 + Location + X-Correlation-Id + X-Trace-Id
+POST http://localhost:8080/api/v1/checkouts
+Content-Type: application/json
+X-Correlation-Id: demo-corr-001
+X-Client-Id: web-storefront
+
+{
+  "customerId": "cust-1001",
+  "customerEmail": "john.doe@example.com",
+  "currency": "USD",
+  "items": [
+    { "sku": "SKU-TSHIRT-M", "name": "T-Shirt (M)", "quantity": 2, "unitPrice": 19.99, "currency": "USD" },
+    { "sku": "SKU-SOCKS",    "name": "Socks",       "quantity": 1, "unitPrice": 5.00,  "currency": "USD" }
+  ]
+}
+
+> {% client.global.set("checkoutId", response.body.checkoutId); %}
+
+### 2) Get it
+GET http://localhost:8080/api/v1/checkouts/{{checkoutId}}
+X-Correlation-Id: demo-corr-002
+
+### 3) Confirm -> calls payment-service via WebClient (watch both sides log the same traceId)
+POST http://localhost:8080/api/v1/checkouts/{{checkoutId}}/confirm
+Content-Type: application/json
+X-Correlation-Id: demo-corr-003
+
+{ "paymentToken": "tok_visa_4242" }
+
+### 4) Declined payment -> 422 CHK-422-002   (create a new checkout first)
+POST http://localhost:8080/api/v1/checkouts/{{checkoutId}}/confirm
+Content-Type: application/json
+
+{ "paymentToken": "tok_decline" }
+
+### 5) Payment service down -> 2 retries, then 503 CHK-503-001
+POST http://localhost:8080/api/v1/checkouts/{{checkoutId}}/confirm
+Content-Type: application/json
+
+{ "paymentToken": "tok_unavailable" }
+
+### 6) Validation error -> 400 CHK-400-001 with every field error
+POST http://localhost:8080/api/v1/checkouts
+Content-Type: application/json
+
+{ "customerId": "", "customerEmail": "nope", "currency": "usd", "items": [] }
+
+### 7) Not found -> 404 CHK-404-001
+GET http://localhost:8080/api/v1/checkouts/chk_00000000000000000000000000000000

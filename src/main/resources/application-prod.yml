@@ -1,0 +1,38 @@
+# Deployed environments (dev/qa/prod share this; differences come from env vars).
+#
+# Logs: one JSON object per line on stdout in Elastic Common Schema (ECS).
+#   - Filebeat / Elastic Agent / Fluent Bit ship stdout to ELK with no grok parsing.
+#   - Dynatrace OneAgent picks up stdout too and links each line to its trace (OneAgent log enrichment adds trace_id/span_id).
+# Each line contains @timestamp, log.level, log.logger, message, service.*, traceId, spanId,
+# MDC (correlationId, clientId, checkoutId) and the structured key/values (event.action, api.duration_ms, ...).
+logging:
+  structured:
+    format:
+      console: ecs
+  level:
+    com.company.checkout: INFO
+
+management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+    export:
+      # Set false when Dynatrace OneAgent already instruments the JVM, to avoid duplicate spans.
+      enabled: ${TRACING_EXPORT_ENABLED:true}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          # OTel Collector, Elastic APM (OTLP intake) or Dynatrace:
+          #   https://<env-id>.live.dynatrace.com/api/v2/otlp/v1/traces
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://otel-collector:4318/v1/traces}
+          # Dynatrace needs: headers.Authorization: "Api-Token ${DT_API_TOKEN}" (verify property name for your Boot version)
+  otlp:
+    metrics:
+      export:
+        url: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:http://otel-collector:4318/v1/metrics}
+
+checkout:
+  downstream:
+    payment:
+      base-url: ${PAYMENT_SERVICE_URL}   # required: startup fails fast if missing

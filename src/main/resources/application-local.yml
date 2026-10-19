@@ -1,0 +1,16 @@
+# Local development: human-readable logs, no trace export (no collector on a laptop).
+management:
+  tracing:
+    export:
+      enabled: false   # traceId/spanId are still generated and logged; just not shipped anywhere
+  otlp:
+    metrics:
+      export:
+        enabled: false
+
+logging:
+  # Every line: [traceId,spanId,correlationId]  — copy any of them to find the whole flow
+  pattern:
+    correlation: "[%X{traceId:-},%X{spanId:-},%X{correlationId:-}] "
+  level:
+    com.company.checkout: DEBUG

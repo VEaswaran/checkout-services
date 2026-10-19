@@ -1,0 +1,75 @@
+# =====================================================================================
+# Base configuration — shared by every environment. Override per env in application-<profile>.yml
+# or with environment variables (CHECKOUT_DOWNSTREAM_PAYMENT_BASE_URL=...).
+# =====================================================================================
+spring:
+  application:
+    name: checkout-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true            # Java 21: one cheap virtual thread per request; blocking WebClient calls are fine
+  reactor:
+    context-propagation: auto  # keeps the trace (Micrometer observation) across Reactor thread hops
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  port: 8080
+  shutdown: graceful           # finish in-flight checkouts before the pod stops
+  error:
+    include-stacktrace: never
+    include-message: never
+
+# ------------------------------------------------------------------ observability
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true          # /actuator/health/liveness and /readiness for Kubernetes
+      show-details: never
+  observations:
+    key-values:
+      application: ${spring.application.name}
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        http.client.requests: true
+  tracing:
+    sampling:
+      probability: 1.0         # lower in high-traffic prod (e.g. 0.1); errors are still logged with traceId
+    propagation:
+      type: w3c                # traceparent header: understood by Dynatrace, Elastic APM, OTel collectors
+
+logging:
+  level:
+    root: INFO
+    com.company.checkout: INFO
+    api.event: INFO            # the API event timeline (request received / downstream / response sent)
+  structured:
+    ecs:
+      service:
+        name: ${spring.application.name}
+        version: ${APP_VERSION:0.0.1-SNAPSHOT}
+        environment: ${APP_ENV:local}
+
+# ------------------------------------------------------------------ downstream services
+checkout:
+  downstream:
+    payment:
+      base-url: ${PAYMENT_SERVICE_URL:http://localhost:8080/stub/payment-service}
+      connect-timeout: 2s
+      response-timeout: 3s
+      overall-timeout: 8s      # >= (attempts x response-timeout) + backoff, or retries get cut off
+      max-connections: 50
+      pending-acquire-timeout: 2s
+      max-idle-time: 30s
+      retry:
+        max-attempts: 2
+        initial-backoff: 200ms
